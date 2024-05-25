@@ -45,3 +45,15 @@ Get records with all fields:
   }
 }
 ```
+
+## Example in Swagger docs
+
+In the POST request:
+
+```
+{
+  "query": "{items(limit: 10) {descGaNombreProducto1 descGaMarcaProducto descCategoriaProducto descCategoriaProdPrincipal}}",
+  "operationName": null,
+  "variables": null
+}
+```

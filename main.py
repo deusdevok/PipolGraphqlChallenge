@@ -1,9 +1,10 @@
 from fastapi import FastAPI
 import strawberry
 from strawberry.fastapi import GraphQLRouter
-from typing import List
+from strawberry.asgi import GraphQL
+from typing import List, Optional
 import csv
-from typing import Optional
+from pydantic import BaseModel
 
 @strawberry.type
 class Item:
@@ -34,7 +35,7 @@ class Item:
 @strawberry.type
 class Query:
     @strawberry.field
-    def items(self) -> List[Item]:
+    def items(self, limit: int | None) -> List[Item]:
         items_data = []
         # Read csv
         with open('Data example - Python Coding Challenge - GraphQL.csv', 'r', encoding="utf8") as f:
@@ -73,6 +74,8 @@ class Query:
                     print(f'Error in line {line}: {e}')
                     break
 
+        if limit:
+            items_data = items_data[:limit]
         return items_data
     
 schema = strawberry.Schema(query=Query)
@@ -83,4 +86,44 @@ app = FastAPI()
 def main():
     return {"message": "main site"}
 
-app.include_router(GraphQLRouter(schema), prefix="/api")
+# Custom GraphQL request body model for Swagger documentation
+class GraphQLRequest(BaseModel):
+    query: str
+    operationName: Optional[str] = None
+    variables: Optional[dict] = None
+
+
+app.include_router(GraphQLRouter(schema), prefix="/api", include_in_schema=False)
+
+@app.get('/search/')
+def search(term: str):
+    filtered_items = {}
+    return filtered_items
+
+
+app.openapi()['paths']['/api/'] = {
+        "post": {
+            "summary": "GraphQL endpoint",
+            "description": "GraphQL endpoint to execute queries",
+            "requestBody": {
+                "content": {
+                    "application/json": {
+                        "schema": GraphQLRequest.model_json_schema()
+                    }
+                }
+            },
+            "responses": {
+                "200": {
+                    "description": "Successful response",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "example": {"data": {}}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }

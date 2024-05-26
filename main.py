@@ -1,82 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
+from fastapi.security import OAuth2PasswordRequestForm
 import strawberry
 from strawberry.fastapi import GraphQLRouter
-from strawberry.asgi import GraphQL
-from typing import List, Optional
-import csv
 from pydantic import BaseModel
-
-@strawberry.type
-class Item:
-    id_tie_fecha_valor: int | None = None
-    id_cli_cliente: int
-    id_ga_vista: float
-    id_ga_tipo_dispositivo: float
-    id_ga_fuente_medio: float
-    desc_ga_sku_producto: str
-    desc_ga_categoria_producto: str
-    fc_agregado_carrito_cant: int
-    fc_ingreso_producto_monto: float
-    fc_retirado_carrito_cant: int | None = None
-    fc_detalle_producto_cant: int
-    fc_producto_cant: int
-    desc_ga_nombre_producto: str
-    fc_visualizaciones_pag_cant: int | None = None
-    flag_pipol: int | None = None
-    SASASA: str
-    id_ga_producto: float | None = None
-    desc_ga_nombre_producto_1: str
-    desc_ga_sku_producto_1: str
-    desc_ga_marca_producto: str
-    desc_ga_cod_producto: str
-    desc_categoria_producto: str
-    desc_categoria_prod_principal: str
-
-@strawberry.type
-class Query:
-    @strawberry.field
-    def items(self, limit: int | None) -> List[Item]:
-        items_data = []
-        # Read csv
-        with open('Data example - Python Coding Challenge - GraphQL.csv', 'r', encoding="utf8") as f:
-            reader = csv.reader(f)
-            # Skip header
-            next(reader)
-            for line in reader:
-                try:
-                    items_data.append(Item(
-                        id_tie_fecha_valor=int(line[0]) if line[0].isdigit() else None,
-                        id_cli_cliente=int(line[1]),
-                        id_ga_vista=float(line[2]),
-                        id_ga_tipo_dispositivo= float(line[3]),
-                        id_ga_fuente_medio= float(line[4]),
-                        desc_ga_sku_producto= line[5],
-                        desc_ga_categoria_producto= line[6],
-                        fc_agregado_carrito_cant= int(line[7]),
-                        fc_ingreso_producto_monto= float(line[8]),
-                        fc_retirado_carrito_cant= int(line[9]) if line[9].isdigit() else None,
-                        fc_detalle_producto_cant= int(line[10]),
-                        fc_producto_cant= int(line[11]),
-                        desc_ga_nombre_producto= line[12],
-                        fc_visualizaciones_pag_cant= int(line[13]) if line[13].isdigit() else None,
-                        flag_pipol= int(line[14]) if line[14].isdigit() else None,
-                        SASASA= line[15],
-                        id_ga_producto= float(line[16]) if line[16] else None,
-                        desc_ga_nombre_producto_1= line[17],
-                        desc_ga_sku_producto_1= line[18],
-                        desc_ga_marca_producto= line[19],
-                        desc_ga_cod_producto= line[20],
-                        desc_categoria_producto= line[21],
-                        desc_categoria_prod_principal=line[22]
-                    ))
-                    
-                except Exception as e:
-                    print(f'Error in line {line}: {e}')
-                    break
-
-        if limit:
-            items_data = items_data[:limit]
-        return items_data
+from graphqlschemas import Query
+from schemas import *
+from helpers import *
     
 schema = strawberry.Schema(query=Query)
 
@@ -86,44 +15,49 @@ app = FastAPI()
 def main():
     return {"message": "main site"}
 
+# Authorization
+@app.post("/token")
+async def login_for_access_token(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+) -> Token:
+    return get_token(form_data)
+
+@app.get("/users/me/", response_model=User)
+async def read_users_me(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    return current_user
+
+
+@app.get("/users/me/items/")
+async def read_own_items(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    return [{"item_id": "Foo", "owner": current_user.username}]
+
 # Custom GraphQL request body model for Swagger documentation
 class GraphQLRequest(BaseModel):
     query: str
-    operationName: Optional[str] = None
-    variables: Optional[dict] = None
 
+async def get_context(user: Annotated[User, Depends(get_current_active_user)]):
+    return {"user": user.username}
 
-app.include_router(GraphQLRouter(schema), prefix="/api", include_in_schema=False)
+app.include_router(GraphQLRouter(schema, context_getter=get_context), prefix="/api", include_in_schema=True)
 
 @app.get('/search/')
 def search(term: str):
     filtered_items = {}
     return filtered_items
 
-
-app.openapi()['paths']['/api/'] = {
-        "post": {
-            "summary": "GraphQL endpoint",
-            "description": "GraphQL endpoint to execute queries",
-            "requestBody": {
+# Include body parameter in GraphQL post in Swagger
+app.openapi()['paths']['/api']['post']['requestBody'] = {
                 "content": {
                     "application/json": {
-                        "schema": GraphQLRequest.model_json_schema()
-                    }
-                }
-            },
-            "responses": {
-                "200": {
-                    "description": "Successful response",
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "example": {"data": {}}
+                        "schema": GraphQLRequest.model_json_schema(),
+                        "example": {"query": "{items(limit: 10) {descGaNombreProducto1 descGaMarcaProducto descCategoriaProducto descCategoriaProdPrincipal}}"}
+                                        }
                             }
-                        }
                     }
-                }
-            }
-        }
-    }
+
+# Remove GraphQL get request from Swagger
+del app.openapi()['paths']['/api']['get']

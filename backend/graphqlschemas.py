@@ -31,10 +31,10 @@ class Item:
 @strawberry.type
 class Query:
     @strawberry.field
-    def items(self, limit: int | None) -> List[Item]:
+    def items(self, limit: int | None = None) -> List[Item]:
         items_data = []
         # Read csv
-        with open('Data example - Python Coding Challenge - GraphQL.csv', 'r', encoding="utf8") as f:
+        with open('./backend/Data example - Python Coding Challenge - GraphQL.csv', 'r', encoding="utf8") as f:
             reader = csv.reader(f)
             # Skip header
             next(reader)
